@@ -1,0 +1,12 @@
+
+Protocol Format
+"BEGIN[Source Process Number][Command][TargetProcessNumber][Contents (If Applicable)END"
+Process numbers are always 2 digits. 0 padded
+
+Process Numbers are the number of the machine that the process is running on.
+eg. cd22.utdallas.edu has process number 22
+
+Commands
+- PING: Used for initialization of threads. Ping other services to see if they're running
+- ACK: General acknowledgement
+- MESSAGE
