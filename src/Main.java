@@ -1,16 +1,22 @@
 import java.io.IOException;
-import java.net.UnknownHostException;
 import java.util.*;
 import java.net.Socket;
-import java.net.ServerSocket;
 import java.util.concurrent.TimeUnit;
 
 //TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
 // click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
 public class Main {
+    // Connection Info
     static final HashMap<Short, Socket> socketMap = new HashMap<Short, Socket>();
-    static final Queue<String> buffer = new ArrayDeque<>();
+    static final HashMap<Short, Integer> portMap = new HashMap<Short, Integer>();
     static short[] processNums;
+    // Message info
+    static final Queue<String> buffer = new ArrayDeque<>();
+    static final LogicalClock clock = new LogicalClock();
+    static final VectorClock vectorClock = new VectorClock();
+    static final String LOCK = "";
+    static Boolean serverInitialized = false;
+    static Boolean dispatcherInitialized = false;
 
     public static String generateUrl(Short processNum) {
         return String.format("dc%02d.utdallas.edu", processNum);
@@ -18,9 +24,9 @@ public class Main {
 
     public static void main(String[] args) {
         // Set process nums from CLI
-        // e.g. java main.class 2 44 11 4
+        // e.g. java main.class 2:5050 44:5055 11:5050 4:5050
         // 2 is self, 44,11,4 are other processes
-        // TODO: Refactor to use 2 threads, one for sending and one for receiving
+
         if(args.length < 2) {
             System.err.println("Error: Multiple processes needed");
             System.out.println("Usage: java -jar Main.jar <process num>");
@@ -32,31 +38,29 @@ public class Main {
 
         for(int i = 0; i < args.length; i++) {
             try {
-                processNums[i] = Short.parseShort(args[i]);
+                if(!args[i].contains(":")) {
+                    throw new RuntimeException("Port missing from arg " + i + ": \"" + args[i] + "\"");
+                }
+                String[] tokens = args[i].split(":");
+                processNums[i] = Short.parseShort(tokens[0]);
+                portMap.put(processNums[i], Integer.parseInt(tokens[1]));
             } catch(NumberFormatException e) {
                 throw new RuntimeException("Invalid process number passed into args");
             }
         }
 
+        vectorClock.initialize(processNums);
         short self = processNums[0];
         Arrays.sort(processNums);
 
         Server receiver = new Server(self, 5050, buffer);
         receiver.start();
 
-        // Establish connections
-        for(int i = 1; i < processNums.length; i++) {
-            String host = generateUrl(processNums[i]);
-            try (Socket curr = new Socket(host, 5050)) {
-                connections[i] = curr;
-            } catch (UnknownHostException e) {
-                System.out.println("Could not connect to unknown host " + host + ".");
-            } catch (IOException e) {
-                System.out.println("Error creating socket");
-            }
-        }
+        // TODO: Create sockets to other processes
+
         // Verify that other processes are connected
         // TODO: Send pings and wait for response?
+
 
         // Send messages
         for (int i = 0; i < 100; i++) {
@@ -79,7 +83,7 @@ public class Main {
         }
 
         // Close connections
-        for(Socket curr : connections) {
+        for(Socket curr : socketMap.values()) {
             try {
                 if(!curr.isClosed()) {
                     curr.close();
@@ -88,5 +92,19 @@ public class Main {
                 System.out.println("Error closing connection");
             }
         }
+    }
+
+    public static void variableNetworkDelay() {
+        // Emulate variable network delay upon message reception
+        try {
+            int millis = (int)(Math.random() *  4000) + 1000;
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static void initializeDispatcher() {
+        dispatcherInitialized = true;
     }
 }
