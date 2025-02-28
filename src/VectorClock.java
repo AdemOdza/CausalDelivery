@@ -19,7 +19,7 @@ public class VectorClock implements Serializable, Comparable<VectorClock> {
 
     public VectorClock(byte[] data) {
         try {
-            this.vector = this.deserialize(data);
+            this.vector = deserialize(data);
         } catch (IOException e) {
             throw new RuntimeException("Constructor - Error creating vector clock from data: " + e.getMessage());
         }
@@ -34,7 +34,7 @@ public class VectorClock implements Serializable, Comparable<VectorClock> {
     public void initialize(byte[] data) {
         this.vector.clear();
         try {
-            HashMap<Short, Integer> o = this.deserialize(data);
+            HashMap<Short, Integer> o = deserialize(data);
             this.vector.clear();
             this.vector.putAll(o);
         } catch (IOException e) {
@@ -73,9 +73,9 @@ public class VectorClock implements Serializable, Comparable<VectorClock> {
             throw new RuntimeException("Cannot serialize empty vector clock. Did you initialize the vector clock?");
         }
         ByteBuffer buf = ByteBuffer.allocate(
-        Integer.BYTES
-                + (Short.BYTES * this.vector.size())
-                + (Integer.BYTES * this.vector.size())
+        Integer.BYTES // Number of processes
+                + (Short.BYTES * this.vector.size()) // Process numbers
+                + (Integer.BYTES * this.vector.size()) // Clock values
         );
 
         buf.putInt(this.vector.size());
@@ -86,7 +86,7 @@ public class VectorClock implements Serializable, Comparable<VectorClock> {
         return buf.array();
     }
 
-    public HashMap<Short, Integer> deserialize(byte[] data) throws IOException {
+    public static HashMap<Short, Integer> deserialize(byte[] data) throws IOException {
         ByteBuffer buf = ByteBuffer.wrap(data);
         int size = buf.getInt();
         HashMap<Short, Integer> o = new HashMap<>();

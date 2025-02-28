@@ -1,22 +1,25 @@
 import java.io.IOException;
+//import java.util.concurrent.locks.Lock;
 import java.util.*;
 import java.net.Socket;
+import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 //TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
 // click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
 public class Main {
     // Connection Info
+    static Logger logger;
     static final HashMap<Short, Socket> socketMap = new HashMap<>();
     static final HashMap<Short, Integer> portMap = new HashMap<>();
     static short[] processNums;
+
     // Message info
-    static final PriorityQueue<Message> buffer = new PriorityQueue<>();
+    static final PriorityBlockingQueue<Message> buffer = new PriorityBlockingQueue<>();
     static final LogicalClock clock = new LogicalClock();
     static final VectorClock vectorClock = new VectorClock();
     static Boolean serverInitialized = false;
     static Boolean dispatcherInitialized = false;
-    static int messagesDelivered = 0;
 
     public static String generateUrl(Short processNum) {
         return String.format("dc%02d.utdallas.edu", processNum);
@@ -30,15 +33,12 @@ public class Main {
         // Parse arguments
         if(args.length < 2) {
             System.err.println("Error: Multiple processes needed");
-            System.out.println("Usage: java -jar Main.jar <process num>");
+            System.out.println("Usage: java -jar Main.jar <process:port pairs>");
             return;
         }
 
-        // Process storage
+        // Parse processes and ports
         processNums = new short[args.length];
-        Socket[] connections = new Socket[args.length]; // Socket objects
-
-        // Parse arguments
         for(int i = 0; i < args.length; i++) {
             try {
                 if(!args[i].contains(":")) {
@@ -53,44 +53,58 @@ public class Main {
             }
         }
 
-        // Initialize clock and vector clock
-        System.out.println("Main: Initializing clock...");
-        vectorClock.initialize(processNums);
-
         // Save self and sort processes for proper prioritization
         short self = processNums[0];
         Arrays.sort(processNums);
 
-        System.out.println("Main: Starting server...");
+        // Initialize synchronized logger
+        try {
+            logger = new Logger(self);
+        } catch (IOException e) {
+            throw new RuntimeException("Error creating logger: ", e);
+        }
+
+        // Initialize clock and vector clock
+        logger.out("Main: Initializing clock...");
+        vectorClock.initialize(processNums);
+        logger.out("Main: Clock initialized.");
+
+        // Start server and dispatcher threads
+        logger.out("Main: Starting server...");
         Server receiver = new Server(self, 5050);
         receiver.start();
         System.out.println("Main: Server started.");
 
-        System.out.println("Main: Starting dispatcher...");
+        logger.out("Main: Starting dispatcher...");
         Dispatcher dispatcher = new Dispatcher(self);
         dispatcher.start();
-        System.out.println("Main: Dispatcher started.");
-
+        logger.out("Main: Dispatcher started.");
 
         // Wait for initialization
-        System.out.println("Main: Waiting for socket initialization...");
+        logger.outAppend("Main: Waiting for socket initialization.");
         while(!dispatcherInitialized || !serverInitialized) {
             try {
-                TimeUnit.MILLISECONDS.sleep(500);
+                TimeUnit.MILLISECONDS.sleep(1000);
             } catch (InterruptedException e) {
                 throw new RuntimeException("Sleep interrupted", e);
             }
+            logger.outAppend(".");
         }
+        logger.out("Main: Sockets initialized.");
 
-
-        // Add messages to buffer
-        for (int i = 0; i < 100; i++) {
-            // Wait for a random amount of time (0, 10] Milliseconds
-            variableNetworkDelay();
-
-            // Send messages to all processes
-            for(int j = 1; j < connections.length; j++) {
-
+        // Go through queue and "deliver" messages. AKA remove from queue
+        int messagesDelivered = 0;
+        while(messagesDelivered < (processNums.length * 100)) {
+            try {
+                synchronized (buffer) {
+                    Message msg = buffer.poll(250, TimeUnit.MILLISECONDS);
+                    if (msg != null) {
+                        logger.out(String.format("Message from process %02d delivered: \"%s\"", msg.source, msg.body));
+                        messagesDelivered++;
+                    }
+                }
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
             }
         }
 
@@ -111,18 +125,23 @@ public class Main {
                     curr.close();
                 }
             } catch (IOException e) {
-                System.out.println("Error closing connection");
+                logger.err("Main: Error closing connection");
             }
         }
 
-        System.out.println("Main: Finished.");
-        System.out.println("Messages delivered: " + messagesDelivered);
+        logger.out("Main: Finished.");
+        logger.out("Messages delivered: " + messagesDelivered);
     }
 
-    public static void variableNetworkDelay() {
+    public static void networkDelay() {
+        // Emulate variable network delay upon message reception
+        networkDelay(1, 10);
+    }
+
+    public static void networkDelay(int lowerBoundMillis, int upperBoundMillis) {
         // Emulate variable network delay upon message reception
         try {
-            int millis = (int)(Math.random() *  4000) + 1000;
+            int millis = (int)(Math.random() *  (upperBoundMillis-lowerBoundMillis)) + lowerBoundMillis;
             Thread.sleep(millis);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);

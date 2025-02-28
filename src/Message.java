@@ -28,33 +28,35 @@ public class Message implements Comparable<Message> {
             throw new InstantiationException("Message does not contain boundary strings.");
         }
         // Message format: BEGIN<source><command><destination><body>CLOCK<clock>END
+
+        // Trim boundaries
         rawMessage = rawMessage.replaceFirst("BEGIN", "");
         rawMessage = rawMessage.substring(0, rawMessage.length() - 3);
         // <source><command><destination><body>CLOCK<clock>
 
-        String[] tokens = rawMessage.split("CLOCK");
+        // Extract and decode vector clock
+        String[] tokens = rawMessage.split("CLOCK", 2);
         this.vectorClock = new VectorClock(tokens[1].getBytes(StandardCharsets.UTF_8));
         rawMessage = tokens[0];
         // <source><command><destination><body>
 
-        if (rawMessage.contains("MESSAGE")) {
-            this.command = Command.MESSAGE;
-        } else if (rawMessage.contains("ACK")) {
-            this.command = Command.ACK;
-        } else if (rawMessage.contains("PING")) {
-            this.command = Command.PING;
-        } else if (rawMessage.contains("INIT")) {
-            this.command = Command.INIT;
-        } else if (rawMessage.contains("TERMINATE")) {
-            this.command = Command.TERMINATE;
-        } else {
-            throw new InstantiationException("Message does not contain valid command.");
+        // Parse command. Use first found command, any others will be considered part of the body
+        this.command = Command.NOOP;
+        int commandIndex = Integer.MAX_VALUE;
+        for (Command c : Command.values()) {
+            if (rawMessage.contains(c.name()) && rawMessage.indexOf(c.name()) < commandIndex) {
+                this.command = c;
+                commandIndex = rawMessage.indexOf(c.name());
+            }
+        }
+        if(this.command == Command.NOOP) {
+            throw new InstantiationException("Message does not contain a valid command.");
         }
 
-        tokens = rawMessage.split(this.command.name());
+        tokens = rawMessage.split(this.command.name(), 2);
         this.source = Short.parseShort(tokens[0]);
         this.destination = Short.parseShort(tokens[1].substring(0, 2));
-        this.body = rawMessage.substring(2);
+        this.body = tokens[1].substring(2);
     }
 
     @Override

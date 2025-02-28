@@ -38,8 +38,29 @@ public class Dispatcher extends Thread implements Runnable {
                 throw new RuntimeException("Server: Error waiting for dispatcher initialization");
             }
         }
-        //TODO: Implement message sending.
-        // Wait for a random amount of time in the range (0,10] millisecond before sending
+
+        // Broadcast messages to all processes
+        for(int i = 0; i < 100; i++) {
+            if (currentThread().isInterrupted()) {
+                Main.logger.err("Dispatcher: Thread interrupted.");
+                break;
+            }
+            // Emulate network delay
+            Main.networkDelay(0, 10);
+
+            // Increment clock once per broadcast and send message to all processes
+            synchronized (Main.clock) {
+                synchronized (Main.vectorClock) {
+                    Main.clock.increment();
+                    Main.vectorClock.put(self, Main.clock.getTime());
+                }
+            }
+            String body = String.format("Hello from Process #%02d! Msg #%03d", self, i);
+            for(Short process : Main.socketMap.keySet()) {
+                Message msg = new Message(self, process, Command.MESSAGE, body, Main.vectorClock);
+                Main.buffer.add(msg);
+            }
+        }
 
     }
 
@@ -62,10 +83,10 @@ public class Dispatcher extends Thread implements Runnable {
         // Update clock before sending INIT msg
         System.out.println("Dispatcher: Incrementing clock...");
         synchronized (Main.clock) {
-            Main.clock.increment();
-        }
-        synchronized (Main.vectorClock) {
-            Main.vectorClock.put(self, Main.clock.getTime());
+            synchronized (Main.vectorClock) {
+                Main.clock.increment();
+                Main.vectorClock.put(self, Main.clock.getTime());
+            }
         }
 
         // Build INIT message and write to socket stream
@@ -78,26 +99,44 @@ public class Dispatcher extends Thread implements Runnable {
 
         // Wait for ACK
         reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        String received = reader.readLine();
-        Message receivedMsg = new Message(received);
+        Message receivedMsg = new Message(reader.readLine());
+        if(receivedMsg.source != process) {
+            throw new RuntimeException("Dispatcher: Received message from unexpected source.");
+        }
+        if(receivedMsg.command != Command.ACK) {
+            throw new RuntimeException("Dispatcher: Received unexpected command.");
+        }
+
         System.out.println("Dispatcher: Received ACK from " + Main.generateUrl(process));
 
         // Emulate variable network delay upon message reception
-        Main.variableNetworkDelay();
+        Main.networkDelay();
 
         // On reception of ACK, update clocks with new timestamps and save confirmed socket
         System.out.println("Dispatcher: Updating clocks...");
         if(receivedMsg.command == Command.ACK) {
-            synchronized (Main.vectorClock) {
-                Main.vectorClock.update(receivedMsg.vectorClock.vector);
+            // TODO: Delete once you've verified the other clock updating method below works
+//            synchronized (Main.vectorClock) {
+//                Main.vectorClock.update(receivedMsg.vectorClock.vector);
+//            }
+//            synchronized (Main.clock) {
+//                Main.clock.setTime(Main.vectorClock.vector.get(self));
+//            }
+
+            // Update clock on reception of message
+            synchronized (Main.clock){
+                synchronized (Main.vectorClock){
+                    Main.clock.increment();
+                    Main.vectorClock.put(self, Main.clock.getTime());
+                    Main.vectorClock.update(receivedMsg.vectorClock.vector);
+                }
             }
-            synchronized (Main.clock) {
-                Main.clock.setTime(Main.vectorClock.vector.get(self));
-            }
+            // Return confirmed socket to be saved into map
             System.out.println("Dispatcher: Connection to " + Main.generateUrl(process) + " established and verified.");
             return socket;
         }
 
         throw new RuntimeException("Error establishing connection to " + Main.generateUrl(process));
     }
+
 }

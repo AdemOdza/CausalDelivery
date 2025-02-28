@@ -3,14 +3,11 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.Queue;
 
 public class Server extends Thread {
-//    ServerSocket serverSocket;
     int port;
     short processNum;
     int rank;
-    boolean initialized = false;
 
     public Server(short processNum, int port) {
         this.port = port;
@@ -21,13 +18,9 @@ public class Server extends Thread {
     // The server class will wait for connection requests from processes with a lower process number
     public void run() {
         BufferedReader reader;
-        PrintWriter writer;
-
-
-        int requestsToMake = Main.processNums.length - 1 - rank;
 
         // Connect to other processes
-        System.out.println("Server: Waiting for connection requests from higher priority servers...");
+        Main.logger.out("Server: Waiting for connection requests from higher priority servers...");
         for(int i = 0; i < rank; i++) {
             try {
                 waitForConnection();
@@ -35,14 +28,17 @@ public class Server extends Thread {
                 throw new RuntimeException("Server: Error establishing connection, i: " + i + ", message:  " + e.getMessage());
             } catch (InstantiationException e) {
                 throw new RuntimeException("Server: Error parsing received message, i: " + i + ", message:  " + e.getMessage());
+            } catch (InterruptedException e) {
+                throw new RuntimeException("Server: Thread error, i: " + i + ", message:  " + e.getMessage());
             }
         }
-        System.out.println("Server: All connections established.");
+
+        Main.logger.out("Server: All connections established.");
         synchronized (Main.serverInitialized){
             Main.serverInitialized = true;
         }
 
-        System.out.println("Server: Waiting for dispatcher initialization...");
+        Main.logger.out("Server: Waiting for dispatcher initialization...");
         while(!Main.dispatcherInitialized) {
             try {
                 Thread.sleep(500);
@@ -51,30 +47,43 @@ public class Server extends Thread {
             }
         }
 
-        //TODO: Verify
+        //TODO: Verify this isn't broken!!!
         int receivedMessages = 0;
         while(receivedMessages < 100 * Main.processNums.length) {
             if (currentThread().isInterrupted()) {
+                Main.logger.err("Server: Thread interrupted.");
                 break;
             }
             //Check each socket, add to queue and increment received count
             for(Socket curr : Main.socketMap.values()) {
                 try {
-                    System.out.println("Server: Receiving message from " + curr.getInetAddress() + ":" + curr.getPort() + "...");
+                    // Attempt to receive message
+                    Main.logger.out("Server: Receiving message from " + curr.getInetAddress() + ":" + curr.getPort() + "...");
                     reader = new BufferedReader(new InputStreamReader(curr.getInputStream()));
-                    Main.variableNetworkDelay();
-                    System.out.println("Server: Message received.");
+                    Main.networkDelay();
+                    Main.logger.out("Server: Message received.");
 
+                    // Get raw message and parse
                     String received = reader.readLine();
                     Message receivedMsg = new Message(received);
+
+                    // Update clock on reception of message
+                    synchronized (Main.clock){
+                        synchronized (Main.vectorClock){
+                            Main.clock.increment();
+                            Main.vectorClock.put(processNum, Main.clock.getTime());
+                            Main.vectorClock.update(receivedMsg.vectorClock.vector);
+                        }
+                    }
+
+                    // Add message to delivery buffer
                     Main.buffer.add(receivedMsg);
                 } catch (IOException | InstantiationException e) {
-                    System.err.println("Server: Error receiving message");
+                    Main.logger.err("Server: Error receiving message");
                 }
             }
             receivedMessages++;
         }
-        
     }
 
     /**
@@ -84,68 +93,68 @@ public class Server extends Thread {
      * @return  The created socket
      */
 
-    public Socket waitForConnection() throws IOException, InstantiationException {
+    public Socket waitForConnection() throws IOException, InstantiationException, InterruptedException {
         BufferedReader reader;
         PrintWriter writer;
 
+        // Wait for connections from higher priority servers
         int retries = 5;
-        // TODO: Flip while and try? The server socket should stay alive
-        while(retries > 0) {
-            // Wait for connections from higher priority servers
-            try (ServerSocket serverSocket = new ServerSocket(this.port)) {
+        try (ServerSocket serverSocket = new ServerSocket(this.port)) {
+            while (retries > 0) {
                 //Create server socket to listen for connections
-                System.out.println("Server: Waiting for connection on port " + this.port + "...");
-                Socket socket = serverSocket.accept();
-                System.out.println("Server: Connection established.");
+                Main.logger.out("Server: Waiting for connection on port " + this.port + "...");
+                Socket socket;
+                try {
+                    socket = serverSocket.accept();
+                } catch (IOException e) {
+                    retries--;
+                    // Wait between retries
+                    Thread.sleep(1000);
+                    continue;
+                }
+                Main.logger.out("Server: Connection established.");
 
                 // Wait for INIT Message
-                System.out.println("Server: Waiting for INIT message...");
+                Main.logger.out("Server: Waiting for INIT message...");
                 reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 String received = reader.readLine();
                 Message receivedMsg = new Message(received);
 
                 // Emulate variable network delay upon message reception
-                Main.variableNetworkDelay();
-                System.out.println("Server: Received message from " + Main.generateUrl(receivedMsg.source));
+                Main.networkDelay();
+                Main.logger.out("Server: Received message from " + Main.generateUrl(receivedMsg.source));
 
-                System.out.println("Server: Updating clock...");
                 // Update clock
-                synchronized (Main.vectorClock) {
-                    Main.vectorClock.update(receivedMsg.vectorClock.vector);
-                }
+                Main.logger.out("Server: Updating clock...");
                 synchronized (Main.clock) {
-                    Main.clock.setTime(Main.vectorClock.vector.get(processNum));
+                    synchronized (Main.vectorClock) {
+                        Main.vectorClock.update(receivedMsg.vectorClock.vector);
+                        Main.clock.setTime(Main.vectorClock.vector.get(processNum));
+                    }
                 }
 
-                if(receivedMsg.command == Command.INIT) {
+                // When we receive an init message, save the socket and send an ACK response
+                if (receivedMsg.command == Command.INIT) {
                     Main.socketMap.put(receivedMsg.source, socket);
-
                     writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
 
                     synchronized (Main.clock) {
-                        Main.clock.increment();
-                    }
-                    synchronized (Main.vectorClock) {
-                        Main.vectorClock.put(processNum, Main.clock.getTime());
+                        synchronized (Main.vectorClock) {
+                            Main.clock.increment();
+                            Main.vectorClock.put(processNum, Main.clock.getTime());
+                        }
                     }
 
-                    System.out.println("Server: Sending ACK message to " + Main.generateUrl(receivedMsg.source) + ":" + Main.portMap.getOrDefault(receivedMsg.source, -1) + "...");
+                    Main.logger.out("Server: Sending ACK message to " + Main.generateUrl(receivedMsg.source) + ":" + Main.portMap.getOrDefault(receivedMsg.source, -1) + "...");
                     Message msg = new Message(processNum, receivedMsg.source, Command.ACK, Main.vectorClock);
                     writer.append(msg.toString()).append('\n');
                     writer.flush();
-                    System.out.println("Server: Connection to " + Main.generateUrl(receivedMsg.source) + " established and verified.");
+                    Main.logger.out("Server: Connection to " + Main.generateUrl(receivedMsg.source) + " established and verified.");
                     return socket;
                 }
-                System.out.println("Server: Invalid message received. Expected INIT, received " + receivedMsg.command);
-            }
 
-            // Wait between retries
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+                Main.logger.out("Server: Invalid message received. Expected INIT, received " + receivedMsg.command);
             }
-            retries--;
             if(retries == 0) {
                 throw new RuntimeException("Server: Retries exceeded. Unable to establish connection");
             }

@@ -1,12 +1,14 @@
 
 Protocol Format
-"BEGIN[Source Process Number][Command][TargetProcessNumber][Contents (If Applicable)END"
+"BEGIN[Source Process Number][Command][TargetProcessNumber][Contents (If Applicable)]CLOCK[Serialized Vector Clock]END"
 Process numbers are always 2 digits. 0 padded
 
 Process Numbers are the number of the machine that the process is running on.
 eg. cd22.utdallas.edu has process number 22
 
-Commands
-- PING: Used for initialization of threads. Ping other services to see if they're running
+Commands specified in the Commands enum
+- PING: Used for checking if a process is alive
+- INIT: Used for initialization of threads.
 - ACK: General acknowledgement
-- MESSAGE
+- MESSAGE: Used to pass information between processes
+- TERMINATE: Used to signal the termination of a process
