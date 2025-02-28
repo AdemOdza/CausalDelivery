@@ -3,7 +3,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 
-public class VectorClock implements Serializable {
+public class VectorClock implements Serializable, Comparable<VectorClock> {
     final HashMap<Short, Integer> vector;
 
     public VectorClock() {
@@ -98,6 +98,33 @@ public class VectorClock implements Serializable {
         }
 
         return o;
+    }
+
+    @Override
+    public int compareTo(VectorClock other) {
+        boolean isLessOrEqualToForAll = true;
+        boolean existsOneLessThan = false;
+
+        for (Short processNum : this.vector.keySet()) {
+            int thisValue = this.vector.getOrDefault(processNum, 0);
+            int otherValue = other.vector.getOrDefault(processNum, 0);
+
+            if (thisValue > otherValue) {
+                isLessOrEqualToForAll = false;
+            }
+
+            if (thisValue < otherValue) {
+                existsOneLessThan = true;
+            }
+        }
+
+        if (isLessOrEqualToForAll && existsOneLessThan) {
+            return -1; // This vector clock is less than the other
+        } else if (isLessOrEqualToForAll) {
+            return 0; // The vector clocks are equal
+        } else {
+            return 1; // This vector clock is greater than the other
+        }
     }
 
 }

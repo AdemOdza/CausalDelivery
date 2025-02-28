@@ -1,6 +1,6 @@
 import java.nio.charset.StandardCharsets;
 
-public class Message {
+public class Message implements Comparable<Message> {
     short source;
     short destination;
     Command command;
@@ -27,15 +27,15 @@ public class Message {
         if (!rawMessage.startsWith("BEGIN") || !rawMessage.endsWith("END")) {
             throw new InstantiationException("Message does not contain boundary strings.");
         }
-
+        // Message format: BEGIN<source><command><destination><body>CLOCK<clock>END
         rawMessage = rawMessage.replaceFirst("BEGIN", "");
         rawMessage = rawMessage.substring(0, rawMessage.length() - 3);
-        // [source][command][destination][body]CLOCK[clock]
+        // <source><command><destination><body>CLOCK<clock>
 
         String[] tokens = rawMessage.split("CLOCK");
         this.vectorClock = new VectorClock(tokens[1].getBytes(StandardCharsets.UTF_8));
         rawMessage = tokens[0];
-        // [source][command][destination][body]
+        // <source><command><destination><body>
 
         if (rawMessage.contains("MESSAGE")) {
             this.command = Command.MESSAGE;
@@ -66,5 +66,10 @@ public class Message {
                 body,
                 new String(vectorClock.serialize(), StandardCharsets.UTF_8)
         );
+    }
+
+    @Override
+    public int compareTo(Message o) {
+        return this.vectorClock.compareTo(o.vectorClock);
     }
 }

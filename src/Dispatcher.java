@@ -17,6 +17,7 @@ public class Dispatcher extends Thread implements Runnable {
         int requestsToMake = Main.processNums.length - 1 - rank;
 
         // Go through all processes with a number greater than ours and attempt to connect.
+        System.out.println("Dispatcher: Establishing connections to lower priority servers...");
         for(int i = rank + 1; i < Main.processNums.length; i++) {
             try {
                 Main.socketMap.put(Main.processNums[i], makeConnection(Main.processNums[i]));
@@ -24,9 +25,21 @@ public class Dispatcher extends Thread implements Runnable {
                 System.err.println("Dispatcher: Error establishing connection to " + Main.generateUrl(Main.processNums[i]));
             }
         }
+
+        System.out.println("Dispatcher: All connections established.");
         synchronized (Main.dispatcherInitialized){
             Main.dispatcherInitialized = true;
         }
+        System.out.println("Dispatcher: Waiting for server initialization...");
+        while(!Main.serverInitialized) {
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                throw new RuntimeException("Server: Error waiting for dispatcher initialization");
+            }
+        }
+        //TODO: Implement message sending.
+        // Wait for a random amount of time in the range (0,10] millisecond before sending
 
     }
 
@@ -42,9 +55,12 @@ public class Dispatcher extends Thread implements Runnable {
         PrintWriter writer;
         
         // Send connection requests to lower priority servers
+        System.out.println("Dispatcher: Connecting to " + Main.generateUrl(process));
         Socket socket = new Socket(Main.generateUrl(process), Main.portMap.get(process));
+        System.out.println("Dispatcher: Connected to " + Main.generateUrl(process));
 
         // Update clock before sending INIT msg
+        System.out.println("Dispatcher: Incrementing clock...");
         synchronized (Main.clock) {
             Main.clock.increment();
         }
@@ -53,20 +69,24 @@ public class Dispatcher extends Thread implements Runnable {
         }
 
         // Build INIT message and write to socket stream
+        System.out.println("Dispatcher: Sending INIT message...");
         writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
         Message msg = new Message(self, process, Command.INIT, Main.vectorClock);
         writer.append(msg.toString()).append('\n');
         writer.flush();
+        System.out.println("Dispatcher: INIT message sent. Waiting for ACK...");
 
         // Wait for ACK
         reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         String received = reader.readLine();
         Message receivedMsg = new Message(received);
+        System.out.println("Dispatcher: Received ACK from " + Main.generateUrl(process));
 
         // Emulate variable network delay upon message reception
         Main.variableNetworkDelay();
 
         // On reception of ACK, update clocks with new timestamps and save confirmed socket
+        System.out.println("Dispatcher: Updating clocks...");
         if(receivedMsg.command == Command.ACK) {
             synchronized (Main.vectorClock) {
                 Main.vectorClock.update(receivedMsg.vectorClock.vector);
@@ -74,6 +94,7 @@ public class Dispatcher extends Thread implements Runnable {
             synchronized (Main.clock) {
                 Main.clock.setTime(Main.vectorClock.vector.get(self));
             }
+            System.out.println("Dispatcher: Connection to " + Main.generateUrl(process) + " established and verified.");
             return socket;
         }
 
