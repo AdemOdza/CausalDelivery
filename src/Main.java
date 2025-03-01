@@ -71,7 +71,7 @@ public class Main {
 
         // Start server and dispatcher threads
         logger.out("Main: Starting server...");
-        Server receiver = new Server(self, 5050);
+        Server receiver = new Server(self, portMap.get(self));
         receiver.start();
         System.out.println("Main: Server started.");
 
@@ -88,7 +88,7 @@ public class Main {
             } catch (InterruptedException e) {
                 throw new RuntimeException("Sleep interrupted", e);
             }
-            logger.outAppend(".");
+            System.out.print(".");
         }
         logger.out("Main: Sockets initialized.");
 

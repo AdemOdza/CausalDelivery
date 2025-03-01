@@ -23,6 +23,7 @@ public class Dispatcher extends Thread implements Runnable {
                 Main.socketMap.put(Main.processNums[i], makeConnection(Main.processNums[i]));
             } catch (IOException | InstantiationException e) {
                 System.err.println("Dispatcher: Error establishing connection to " + Main.generateUrl(Main.processNums[i]));
+                System.err.println(e.getMessage());
             }
         }
 
@@ -38,6 +39,7 @@ public class Dispatcher extends Thread implements Runnable {
                 throw new RuntimeException("Server: Error waiting for dispatcher initialization");
             }
         }
+        System.out.println("debug Sockets: " + Main.socketMap.keySet());
 
         // Broadcast messages to all processes
         for(int i = 0; i < 100; i++) {
@@ -56,9 +58,20 @@ public class Dispatcher extends Thread implements Runnable {
                 }
             }
             String body = String.format("Hello from Process #%02d! Msg #%03d", self, i);
+            PrintWriter writer;
             for(Short process : Main.socketMap.keySet()) {
+                if(process == self) {
+                    continue;
+                }
+                Main.logger.out(String.format("Dispatcher: Sending message to %s", Main.generateUrl(process)));
                 Message msg = new Message(self, process, Command.MESSAGE, body, Main.vectorClock);
-                Main.buffer.add(msg);
+                try {
+                    writer = new PrintWriter(new OutputStreamWriter(Main.socketMap.get(process).getOutputStream(), StandardCharsets.UTF_8), true);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+                writer.append(msg.toString()).append('\n');
+                writer.flush();
             }
         }
 
