@@ -30,4 +30,4 @@ Logger.class: Logger.java
 	$(JC) $(JFLAGS) $<
 
 clean:
-	$(RM) *.class
+	$(RM) *.class Project1Process*.txt

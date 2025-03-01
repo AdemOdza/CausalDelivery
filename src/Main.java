@@ -99,7 +99,7 @@ public class Main {
                 synchronized (buffer) {
                     Message msg = buffer.poll(250, TimeUnit.MILLISECONDS);
                     if (msg != null) {
-                        logger.out(String.format("Message from process %02d delivered: \"%s\"", msg.source, msg.body));
+                        logger.out(String.format("Message %03d from process %02d delivered: \"%s\"", messagesDelivered + 1, msg.source, msg.body));
                         messagesDelivered++;
                     }
                 }

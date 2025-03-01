@@ -24,19 +24,27 @@ public class Message implements Comparable<Message> {
     }
 
     public Message(String rawMessage) throws InstantiationException {
+        System.out.println("Debug 1: " + rawMessage.trim());
         if (!rawMessage.startsWith("BEGIN") || !rawMessage.endsWith("END")) {
             throw new InstantiationException("Message does not contain boundary strings.");
         }
         // Message format: BEGIN<source><command><destination><body>CLOCK<clock>END
 
         // Trim boundaries
+        String debugMsg = rawMessage;
         rawMessage = rawMessage.replaceFirst("BEGIN", "");
         rawMessage = rawMessage.substring(0, rawMessage.length() - 3);
         // <source><command><destination><body>CLOCK<clock>
 
         // Extract and decode vector clock
         String[] tokens = rawMessage.split("CLOCK", 2);
-        this.vectorClock = new VectorClock(tokens[1].getBytes(StandardCharsets.UTF_8));
+        try {
+            this.vectorClock = new VectorClock(tokens[1].getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            System.out.println("Error decoding vector clock. " + e.getMessage());
+            System.out.println(debugMsg);
+            throw new InstantiationException("Error decoding vector clock.");
+        }
         rawMessage = tokens[0];
         // <source><command><destination><body>
 

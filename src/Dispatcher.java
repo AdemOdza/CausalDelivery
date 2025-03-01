@@ -28,7 +28,7 @@ public class Dispatcher extends Thread implements Runnable {
         }
 
         System.out.println("Dispatcher: All connections established.");
-        synchronized (Main.dispatcherInitialized){
+        synchronized (Main.dispatcherInitialized) {
             Main.dispatcherInitialized = true;
         }
         System.out.println("Dispatcher: Waiting for server initialization...");
@@ -63,7 +63,7 @@ public class Dispatcher extends Thread implements Runnable {
                 if(process == self) {
                     continue;
                 }
-                Main.logger.out(String.format("Dispatcher: Sending message to %s", Main.generateUrl(process)));
+                Main.logger.out(String.format("Dispatcher: Sending message %03d to %s", i, Main.generateUrl(process)));
                 Message msg = new Message(self, process, Command.MESSAGE, body, Main.vectorClock);
                 try {
                     writer = new PrintWriter(new OutputStreamWriter(Main.socketMap.get(process).getOutputStream(), StandardCharsets.UTF_8), true);
@@ -74,7 +74,7 @@ public class Dispatcher extends Thread implements Runnable {
                 writer.flush();
             }
         }
-
+        Main.logger.out("Dispatcher: Finished.");
     }
 
     /**
@@ -106,6 +106,7 @@ public class Dispatcher extends Thread implements Runnable {
         System.out.println("Dispatcher: Sending INIT message...");
         writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
         Message msg = new Message(self, process, Command.INIT, Main.vectorClock);
+        System.out.println(msg);
         writer.append(msg.toString()).append('\n');
         writer.flush();
         System.out.println("Dispatcher: INIT message sent. Waiting for ACK...");
@@ -128,14 +129,6 @@ public class Dispatcher extends Thread implements Runnable {
         // On reception of ACK, update clocks with new timestamps and save confirmed socket
         System.out.println("Dispatcher: Updating clocks...");
         if(receivedMsg.command == Command.ACK) {
-            // TODO: Delete once you've verified the other clock updating method below works
-//            synchronized (Main.vectorClock) {
-//                Main.vectorClock.update(receivedMsg.vectorClock.vector);
-//            }
-//            synchronized (Main.clock) {
-//                Main.clock.setTime(Main.vectorClock.vector.get(self));
-//            }
-
             // Update clock on reception of message
             synchronized (Main.clock){
                 synchronized (Main.vectorClock){
