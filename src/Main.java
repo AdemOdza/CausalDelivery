@@ -81,18 +81,19 @@ public class Main {
         logger.out("Main: Dispatcher started.");
 
         // Wait for initialization
-        logger.outAppend("Main: Waiting for socket initialization.");
-        while(!dispatcherInitialized || !serverInitialized) {
-            try {
-                TimeUnit.MILLISECONDS.sleep(1000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException("Sleep interrupted", e);
-            }
-            System.out.print(".");
-        }
-        logger.out("Main: Sockets initialized.");
+//        logger.outAppend("Main: Waiting for socket initialization.");
+//        while(!dispatcherInitialized || !serverInitialized) {
+//            try {
+//                TimeUnit.MILLISECONDS.sleep(1000);
+//            } catch (InterruptedException e) {
+//                throw new RuntimeException("Sleep interrupted", e);
+//            }
+//            System.out.print(".");
+//        }
+//        logger.out("Main: Sockets initialized.");
 
         // Go through queue and "deliver" messages. AKA remove from queue
+        logger.out("Main: Delivering messages...");
         int messagesDelivered = 0;
         while(messagesDelivered < (processNums.length * 100)) {
             try {
@@ -107,9 +108,10 @@ public class Main {
                 throw new RuntimeException(e);
             }
         }
+        logger.out("Main: All messages delivered.");
 
         // Wait for Server and Dispatcher to be finished
-        while(!(dispatcherInitialized || serverInitialized)) {
+        while(dispatcherInitialized || serverInitialized) {
             try {
                 TimeUnit.MILLISECONDS.sleep(500);
             } catch (InterruptedException e) {

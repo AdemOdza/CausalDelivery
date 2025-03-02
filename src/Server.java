@@ -47,7 +47,7 @@ public class Server extends Thread {
             }
         }
 
-        //TODO: Verify this isn't broken!!!
+        //TODO: Rework this, not working correctly
         int receivedMessages = 0;
         while(receivedMessages < 100 * Main.processNums.length) {
             if (currentThread().isInterrupted()) {
@@ -65,6 +65,13 @@ public class Server extends Thread {
 
                     // Get raw message and parse
                     String received = reader.readLine();
+                    for(int retries = 5; retries > 0; retries--) {
+                        if(received != null) {
+                            break;
+                        }
+                        Thread.sleep(200);
+                        received = reader.readLine();
+                    }
                     Message receivedMsg = new Message(received);
 
                     // Update clock on reception of message
@@ -78,12 +85,21 @@ public class Server extends Thread {
 
                     // Add message to delivery buffer
                     Main.buffer.add(receivedMsg);
+                    receivedMessages++;
                 } catch (IOException | InstantiationException e) {
-                    Main.logger.err("Server: Error receiving message");
+                    Main.logger.err("Server: Error receiving message - " + e.getMessage());
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
                 }
             }
-            receivedMessages++;
+            System.out.println("Server Received: " + receivedMessages);
         }
+
+        Main.logger.out("Server: Finished.");
+        synchronized (Main.serverInitialized){
+            Main.serverInitialized = false;
+        }
+
     }
 
     /**

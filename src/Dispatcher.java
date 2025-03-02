@@ -75,6 +75,9 @@ public class Dispatcher extends Thread implements Runnable {
             }
         }
         Main.logger.out("Dispatcher: Finished.");
+        synchronized (Main.dispatcherInitialized) {
+            Main.dispatcherInitialized = false;
+        }
     }
 
     /**

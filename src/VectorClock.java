@@ -17,7 +17,7 @@ public class VectorClock implements Serializable, Comparable<VectorClock> {
         }
     }
 
-    public VectorClock(byte[] data) {
+    public VectorClock(String data) {
         try {
             this.vector = deserialize(data);
         } catch (IOException e) {
@@ -31,7 +31,7 @@ public class VectorClock implements Serializable, Comparable<VectorClock> {
         }
     }
 
-    public void initialize(byte[] data) {
+    public void initialize(String data) {
         this.vector.clear();
         try {
             HashMap<Short, Integer> o = deserialize(data);
@@ -68,33 +68,25 @@ public class VectorClock implements Serializable, Comparable<VectorClock> {
         }
     }
 
-    public byte[] serialize() {
-        if(this.vector.isEmpty()) {
-            throw new RuntimeException("Cannot serialize empty vector clock. Did you initialize the vector clock?");
+    public String serialize() {
+        String data = this.vector.size() + "";
+        for(Short processNum : this.vector.keySet()) {
+            data += "|" + processNum + "|" + this.vector.get(processNum);
         }
-        ByteBuffer buf = ByteBuffer.allocate(
-        Integer.BYTES // Number of processes
-                + (Short.BYTES * this.vector.size()) // Process numbers
-                + (Integer.BYTES * this.vector.size()) // Clock values
-        );
-
-        buf.putInt(this.vector.size());
-        for( short processNum : this.vector.keySet()) {
-            buf.putShort(processNum);
-            buf.putInt(this.vector.get(processNum));
-        }
-        return buf.array();
+        return data;
     }
 
-    public static HashMap<Short, Integer> deserialize(byte[] data) throws IOException {
-        ByteBuffer buf = ByteBuffer.wrap(data);
-        int size = buf.getInt();
-        HashMap<Short, Integer> o = new HashMap<>();
-        for(int i = 0; i < size; i++) {
-            o.put(buf.getShort(), buf.getInt());
+    public static HashMap<Short, Integer> deserialize(String data) throws IOException {
+        String[] tokens = data.trim().split("\\|");
+        if(tokens.length < 3) {
+            throw new IOException("Invalid vector clock data");
         }
-        if(buf.hasRemaining()) {
-            throw new IOException("Invalid vector clock: extra bytes found in buffer");
+
+        int size = Integer.parseInt(tokens[0]);
+        HashMap<Short, Integer> o = new HashMap<>();
+
+        for(int i = 1; i < (2 * size); i+=2) {
+            o.put(Short.parseShort(tokens[i]), Integer.parseInt(tokens[i+1]));
         }
 
         return o;
