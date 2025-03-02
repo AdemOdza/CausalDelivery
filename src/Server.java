@@ -2,6 +2,7 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 public class Server extends Thread {
@@ -47,59 +48,63 @@ public class Server extends Thread {
             }
         }
 
-        //TODO: Rework this, not working correctly
-        int receivedMessages = 0;
-        while(receivedMessages < 100 * Main.processNums.length) {
-            if (currentThread().isInterrupted()) {
-                Main.logger.err("Server: Thread interrupted.");
-                break;
-            }
-            //Check each socket, add to queue and increment received count
-            for(Socket curr : Main.socketMap.values()) {
+        ArrayList<Thread> threads = new ArrayList<>();
+        for(Socket s: Main.socketMap.values()) {
+            Thread t = new Thread(() -> {
+                int numReceived = 0;
+                BufferedReader r = null;
                 try {
-                    // Attempt to receive message
-                    Main.logger.out("Server: Receiving message from " + curr.getInetAddress() + ":" + curr.getPort() + "...");
-                    reader = new BufferedReader(new InputStreamReader(curr.getInputStream()));
-                    Main.networkDelay();
-                    Main.logger.out("Server: Message received.");
-
-                    // Get raw message and parse
-                    String received = reader.readLine();
-                    for(int retries = 5; retries > 0; retries--) {
-                        if(received != null) {
-                            break;
-                        }
-                        Thread.sleep(200);
-                        received = reader.readLine();
-                    }
-                    Message receivedMsg = new Message(received);
-
-                    // Update clock on reception of message
-                    synchronized (Main.clock){
-                        synchronized (Main.vectorClock){
-                            Main.clock.increment();
-                            Main.vectorClock.put(processNum, Main.clock.getTime());
-                            Main.vectorClock.update(receivedMsg.vectorClock.vector);
-                        }
-                    }
-
-                    // Add message to delivery buffer
-                    Main.buffer.add(receivedMsg);
-                    receivedMessages++;
-                } catch (IOException | InstantiationException e) {
-                    Main.logger.err("Server: Error receiving message - " + e.getMessage());
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
+                    r = new BufferedReader(new InputStreamReader(s.getInputStream()));
+                } catch (IOException e) {
+                    throw new RuntimeException("Server Worker: Error receiving message - " + e.getMessage());
                 }
+
+                while (numReceived < 100) {
+                    try {
+                        // Get raw message and parse
+                        String received = null;
+                        while((received = r.readLine()) == null) {
+                            Thread.sleep(100);
+                        }
+                        Message receivedMsg = new Message(received);
+
+                        // Update clock on reception of message
+                        synchronized (Main.clock) {
+                            synchronized (Main.vectorClock) {
+                                Main.clock.increment();
+                                Main.vectorClock.put(processNum, Main.clock.getTime());
+                                Main.vectorClock.update(receivedMsg.vectorClock.vector);
+                            }
+                        }
+
+                        // Add message to delivery buffer
+                        Main.buffer.add(receivedMsg);
+                        numReceived++;
+                    } catch (IOException | InstantiationException e) {
+                        throw new RuntimeException("Server Worker: Error receiving message - " + e.getMessage());
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException("Server Worker: Interrupted - " + e.getMessage());
+                    }
+                }
+            });
+            threads.add(t);
+        }
+
+        Main.logger.out("Server: Starting worker threads.");
+        for(Thread t: threads) {
+            t.start();
+        }
+
+        Main.logger.out("Server: All worker threads started.");
+        for(Thread t: threads) {
+            try {
+                System.out.println("Joining thread");
+                t.join();
+            } catch (InterruptedException e) {
+                throw new RuntimeException("Server: Error joining thread - " + e);
             }
-            System.out.println("Server Received: " + receivedMessages);
         }
-
         Main.logger.out("Server: Finished.");
-        synchronized (Main.serverInitialized){
-            Main.serverInitialized = false;
-        }
-
     }
 
     /**

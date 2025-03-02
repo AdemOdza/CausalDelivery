@@ -30,7 +30,7 @@ public class Main {
         // e.g. java main.class 2:5050 44:5055 11:5050 4:5050
         // 2 is self, 44,11,4 are other processes
 
-        // Parse arguments
+        // Vaildate arguments
         if(args.length < 2) {
             System.err.println("Error: Multiple processes needed");
             System.out.println("Usage: java -jar Main.jar <process:port pairs>");
@@ -69,28 +69,17 @@ public class Main {
         vectorClock.initialize(processNums);
         logger.out("Main: Clock initialized.");
 
-        // Start server and dispatcher threads
+        // Start server thread
         logger.out("Main: Starting server...");
         Server receiver = new Server(self, portMap.get(self));
         receiver.start();
         System.out.println("Main: Server started.");
 
+        // Start dispatcher thread
         logger.out("Main: Starting dispatcher...");
         Dispatcher dispatcher = new Dispatcher(self);
         dispatcher.start();
         logger.out("Main: Dispatcher started.");
-
-        // Wait for initialization
-//        logger.outAppend("Main: Waiting for socket initialization.");
-//        while(!dispatcherInitialized || !serverInitialized) {
-//            try {
-//                TimeUnit.MILLISECONDS.sleep(1000);
-//            } catch (InterruptedException e) {
-//                throw new RuntimeException("Sleep interrupted", e);
-//            }
-//            System.out.print(".");
-//        }
-//        logger.out("Main: Sockets initialized.");
 
         // Go through queue and "deliver" messages. AKA remove from queue
         logger.out("Main: Delivering messages...");
@@ -110,15 +99,14 @@ public class Main {
         }
         logger.out("Main: All messages delivered.");
 
-        // Wait for Server and Dispatcher to be finished
-        while(dispatcherInitialized || serverInitialized) {
-            try {
-                TimeUnit.MILLISECONDS.sleep(500);
-            } catch (InterruptedException e) {
-                throw new RuntimeException("Sleep interrupted", e);
-            }
+        // Wait for threads to finish
+        try {
+            dispatcher.join();
+            receiver.join();
+            System.out.println("ASDFOJKHASDGFIPKJHGSDFJLHGBSDFLIJHFSDG");
+        } catch (InterruptedException e) {
+            logger.err("Error waiting for threads to finish - " + e.getMessage());
         }
-
 
         // Close connections
         for(Socket curr : socketMap.values()) {
@@ -133,6 +121,7 @@ public class Main {
 
         logger.out("Main: Finished.");
         logger.out("Messages delivered: " + messagesDelivered);
+        logger.destroy();
     }
 
     public static void networkDelay() {
