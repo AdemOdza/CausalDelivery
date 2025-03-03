@@ -54,7 +54,7 @@ public class Message implements Comparable<Message> {
                 commandIndex = rawMessage.indexOf(c.name());
             }
         }
-        if(this.command == Command.NOOP) {
+        if (this.command == Command.NOOP) {
             throw new InstantiationException("Message does not contain a valid command.");
         }
 

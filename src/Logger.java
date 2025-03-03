@@ -8,11 +8,11 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 public class Logger {
-    private short self;
-    private String filename;
-    private DateTimeFormatter formatter;
-    private File file;
-    private PrintWriter fileWriter;
+    private final short self;
+    private final String filename;
+    private final DateTimeFormatter formatter;
+    private final File file;
+    private final PrintWriter fileWriter;
 
     public Logger(short self) throws IOException {
         this.self = self;
@@ -22,7 +22,7 @@ public class Logger {
         System.out.println(file.getAbsolutePath());
         fileWriter = new PrintWriter(file);
         Files.deleteIfExists(file.toPath());
-        if(file.createNewFile()) {
+        if (file.createNewFile()) {
             String log = String.format("Log file created: %s", filename);
             out(log);
         } else {

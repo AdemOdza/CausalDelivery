@@ -41,23 +41,23 @@ public class VectorClock implements Serializable, Comparable<VectorClock> {
             throw new RuntimeException("Error creating vector clock from data: " + e.getMessage());
         }
 
-        if(this.vector.isEmpty()) {
+        if (this.vector.isEmpty()) {
             throw new RuntimeException("Error initializing from bytes: vector clock is empty");
         }
     }
 
     public void put(Short processNum, Integer value) {
-        if(this.vector.isEmpty()) {
+        if (this.vector.isEmpty()) {
             throw new RuntimeException("Cannot put to empty vector clock. Did you initialize the vector clock?");
         }
         this.vector.put(processNum, value);
     }
 
     public void update(HashMap<Short, Integer> newVector) {
-        if(this.vector.isEmpty()) {
+        if (this.vector.isEmpty()) {
             throw new RuntimeException("Cannot update empty vector clock. Did you initialize the vector clock?");
         }
-        for( short processNum : newVector.keySet()) {
+        for (short processNum : newVector.keySet()) {
             this.vector.put(
                     processNum,
                     Math.max(
@@ -70,7 +70,7 @@ public class VectorClock implements Serializable, Comparable<VectorClock> {
 
     public String serialize() {
         String data = this.vector.size() + "";
-        for(Short processNum : this.vector.keySet()) {
+        for (Short processNum : this.vector.keySet()) {
             data += "|" + processNum + "|" + this.vector.get(processNum);
         }
         return data;
@@ -78,15 +78,15 @@ public class VectorClock implements Serializable, Comparable<VectorClock> {
 
     public static HashMap<Short, Integer> deserialize(String data) throws IOException {
         String[] tokens = data.trim().split("\\|");
-        if(tokens.length < 3) {
+        if (tokens.length < 3) {
             throw new IOException("Invalid vector clock data");
         }
 
         int size = Integer.parseInt(tokens[0]);
         HashMap<Short, Integer> o = new HashMap<>();
 
-        for(int i = 1; i < (2 * size); i+=2) {
-            o.put(Short.parseShort(tokens[i]), Integer.parseInt(tokens[i+1]));
+        for (int i = 1; i < (2 * size); i += 2) {
+            o.put(Short.parseShort(tokens[i]), Integer.parseInt(tokens[i + 1]));
         }
 
         return o;
