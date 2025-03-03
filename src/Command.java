@@ -1,3 +1,3 @@
 public enum Command {
-    ACK, PING, MESSAGE, INIT, TERMINATE, NOOP
+    ACK, MESSAGE, INIT, TERMINATE, NOOP
 }

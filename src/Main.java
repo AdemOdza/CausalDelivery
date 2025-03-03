@@ -30,8 +30,8 @@ public class Main {
         // e.g. java main.class 2:5050 44:5055 11:5050 4:5050
         // 2 is self, 44,11,4 are other processes
 
-        // Parse arguments
-        if(args.length < 2) {
+        // Vaildate arguments
+        if (args.length < 2) {
             System.err.println("Error: Multiple processes needed");
             System.out.println("Usage: java -jar Main.jar <process:port pairs>");
             return;
@@ -39,16 +39,16 @@ public class Main {
 
         // Parse processes and ports
         processNums = new short[args.length];
-        for(int i = 0; i < args.length; i++) {
+        for (int i = 0; i < args.length; i++) {
             try {
-                if(!args[i].contains(":")) {
+                if (!args[i].contains(":")) {
                     throw new RuntimeException("Port missing from arg " + i + ": \"" + args[i] + "\"");
                 }
                 String[] tokens = args[i].split(":");
                 processNums[i] = Short.parseShort(tokens[0]);
                 portMap.put(processNums[i], Integer.parseInt(tokens[1]));
                 System.out.println("Main: Parsed arg Process " + processNums[i] + " on port " + portMap.get(processNums[i]));
-            } catch(NumberFormatException e) {
+            } catch (NumberFormatException e) {
                 throw new RuntimeException("Invalid process number passed into args");
             }
         }
@@ -69,39 +69,32 @@ public class Main {
         vectorClock.initialize(processNums);
         logger.out("Main: Clock initialized.");
 
-        // Start server and dispatcher threads
+        // Start server thread
         logger.out("Main: Starting server...");
         Server receiver = new Server(self, portMap.get(self));
         receiver.start();
         System.out.println("Main: Server started.");
 
+        // Start dispatcher thread
         logger.out("Main: Starting dispatcher...");
         Dispatcher dispatcher = new Dispatcher(self);
         dispatcher.start();
         logger.out("Main: Dispatcher started.");
 
-        // Wait for initialization
-//        logger.outAppend("Main: Waiting for socket initialization.");
-//        while(!dispatcherInitialized || !serverInitialized) {
-//            try {
-//                TimeUnit.MILLISECONDS.sleep(1000);
-//            } catch (InterruptedException e) {
-//                throw new RuntimeException("Sleep interrupted", e);
-//            }
-//            System.out.print(".");
-//        }
-//        logger.out("Main: Sockets initialized.");
-
         // Go through queue and "deliver" messages. AKA remove from queue
         logger.out("Main: Delivering messages...");
         int messagesDelivered = 0;
-        while(messagesDelivered < (processNums.length * 100)) {
+        while (messagesDelivered < ((processNums.length - 1) * 100)) {
+            int retries = 5;
             try {
-                synchronized (buffer) {
-                    Message msg = buffer.poll(250, TimeUnit.MILLISECONDS);
-                    if (msg != null) {
-                        logger.out(String.format("Message %03d from process %02d delivered: \"%s\"", messagesDelivered + 1, msg.source, msg.body));
-                        messagesDelivered++;
+                Message msg = buffer.poll(250, TimeUnit.MILLISECONDS);
+                if (msg != null) {
+                    logger.out(String.format("Message %03d from process %02d delivered: \"%s\"", messagesDelivered + 1, msg.source, msg.body));
+                    messagesDelivered++;
+                } else {
+                    if (--retries == 0) {
+                        logger.err("Main: Retries exceeded. Unable to deliver message #" + (messagesDelivered + 1));
+                        throw new RuntimeException("Main: Retries exceeded. Unable to deliver message");
                     }
                 }
             } catch (InterruptedException e) {
@@ -110,20 +103,18 @@ public class Main {
         }
         logger.out("Main: All messages delivered.");
 
-        // Wait for Server and Dispatcher to be finished
-        while(dispatcherInitialized || serverInitialized) {
-            try {
-                TimeUnit.MILLISECONDS.sleep(500);
-            } catch (InterruptedException e) {
-                throw new RuntimeException("Sleep interrupted", e);
-            }
+        // Wait for threads to finish
+        try {
+            dispatcher.join(5000);
+            receiver.join(5000);
+        } catch (InterruptedException e) {
+            logger.err("Error waiting for threads to finish - " + e.getMessage());
         }
 
-
         // Close connections
-        for(Socket curr : socketMap.values()) {
+        for (Socket curr : socketMap.values()) {
             try {
-                if(!curr.isClosed()) {
+                if (!curr.isClosed()) {
                     curr.close();
                 }
             } catch (IOException e) {
@@ -133,6 +124,7 @@ public class Main {
 
         logger.out("Main: Finished.");
         logger.out("Messages delivered: " + messagesDelivered);
+        logger.destroy();
     }
 
     public static void networkDelay() {
@@ -143,7 +135,7 @@ public class Main {
     public static void networkDelay(int lowerBoundMillis, int upperBoundMillis) {
         // Emulate variable network delay upon message reception
         try {
-            int millis = (int)(Math.random() *  (upperBoundMillis-lowerBoundMillis)) + lowerBoundMillis;
+            int millis = (int) (Math.random() * (upperBoundMillis - lowerBoundMillis)) + lowerBoundMillis;
             Thread.sleep(millis);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);

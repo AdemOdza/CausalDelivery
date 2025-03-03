@@ -18,6 +18,7 @@ public class LogicalClock {
     public final int getTime() {
         return time;
     }
+
     public final void setTime(int time) {
         this.time = time;
     }
