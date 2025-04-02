@@ -7,7 +7,7 @@ title: Causal Delivery
 # Message Protocol
 
 The message protocol is of the format :
-$$BEGIN<source><command><destination><body>CLOCK<vector clock>END$$
+BEGIN\<source\>\<command\>\<destination\>\<body\>CLOCK\<vector clock\>END
 
 ------------------------------------------------------------------------
 
